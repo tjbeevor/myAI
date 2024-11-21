@@ -46,10 +46,6 @@ def reset_chat():
     """Reset the chat history"""
     st.session_state.messages = []
 
-def configure_gemini(api_key):
-    """Configure the Gemini API with the provided key"""
-    genai.configure(api_key=api_key)
-
 def get_gemini_response(model_name, prompt):
     """Get response from the selected Gemini model"""
     try:
@@ -65,6 +61,13 @@ def update_last_activity():
 
 def main():
     st.set_page_config(page_title="Secure Gemini Chatbot", layout="wide")
+    
+    # Configure Gemini with API key from secrets
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    except Exception as e:
+        st.error("Error configuring Gemini API. Please check your API key in the secrets.")
+        return
     
     # Initialize session state
     initialize_session_state()
@@ -129,8 +132,6 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         
-        api_key = st.text_input("Enter Gemini API Key:", type="password")
-        
         model_options = [
             'gemini-pro',
             'gemini-pro-vision',
@@ -159,16 +160,8 @@ def main():
             This is a secure chatbot interface for Google's Gemini AI models.
             - Authenticated access only
             - Session timeout protection
-            - Secure API key management
             - Multiple model support
         """)
-
-    # Configure Gemini if API key is provided
-    if api_key:
-        configure_gemini(api_key)
-    else:
-        st.warning("Please enter your Gemini API key in the sidebar to continue.")
-        return
 
     # Display chat messages
     for message in st.session_state.messages:
