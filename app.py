@@ -19,7 +19,7 @@ def initialize_session_state():
 def check_session_timeout():
     """Check if the session has timed out"""
     if st.session_state.authenticated:
-        timeout = st.secrets.get("SESSION_TIMEOUT", 3600)  # Default 1 hour
+        timeout = 3600  # Default 1 hour
         if datetime.now() - st.session_state.last_activity > timedelta(seconds=timeout):
             st.session_state.authenticated = False
             st.session_state.login_attempts = 0
@@ -28,8 +28,8 @@ def check_session_timeout():
 
 def authenticate(password_attempt):
     """Enhanced password authentication with attempt limiting"""
-    max_attempts = st.secrets.get("ALLOWED_ATTEMPTS", 3)
-    correct_password = st.secrets["APP_PASSWORD"]
+    max_attempts = 3
+    correct_password = "password"  # In production, use st.secrets["APP_PASSWORD"]
     
     if st.session_state.login_attempts >= max_attempts:
         time.sleep(2)  # Add delay to prevent brute force
@@ -109,7 +109,7 @@ def main():
         password_input = st.text_input("Enter password:", type="password")
         
         # Show remaining attempts
-        max_attempts = st.secrets.get("ALLOWED_ATTEMPTS", 3)
+        max_attempts = 3
         remaining_attempts = max_attempts - st.session_state.login_attempts
         if remaining_attempts < max_attempts:
             st.warning(f"Remaining attempts: {remaining_attempts}")
@@ -117,7 +117,7 @@ def main():
         if st.button("Login"):
             if authenticate(password_input):
                 st.session_state.authenticated = True
-                st.experimental_rerun()
+                st.rerun()
             else:
                 if remaining_attempts <= 1:
                     st.error("Maximum login attempts reached. Please try again later.")
@@ -129,10 +129,7 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         
-        # Try to get API key from secrets first
-        api_key = st.secrets.get("GEMINI_API_KEY", None)
-        if not api_key:
-            api_key = st.text_input("Enter Gemini API Key:", type="password")
+        api_key = st.text_input("Enter Gemini API Key:", type="password")
         
         model_options = [
             'gemini-pro',
@@ -149,12 +146,12 @@ def main():
         
         if st.button("Reset Chat"):
             reset_chat()
-            st.experimental_rerun()
+            st.rerun()
         
         if st.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.login_attempts = 0
-            st.experimental_rerun()
+            st.rerun()
             
         st.markdown("---")
         st.markdown("### About")
@@ -217,7 +214,7 @@ def main():
             })
             
             # Clear input and rerun to update chat
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
