@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 
 def initialize_session_state():
     """Initialize session state variables if they don't exist"""
@@ -10,10 +11,36 @@ def initialize_session_state():
         st.session_state.messages = []
     if 'current_model' not in st.session_state:
         st.session_state.current_model = 'gemini-pro'
+    if 'login_attempts' not in st.session_state:
+        st.session_state.login_attempts = 0
+    if 'last_activity' not in st.session_state:
+        st.session_state.last_activity = datetime.now()
+
+def check_session_timeout():
+    """Check if the session has timed out"""
+    if st.session_state.authenticated:
+        timeout = st.secrets.get("SESSION_TIMEOUT", 3600)  # Default 1 hour
+        if datetime.now() - st.session_state.last_activity > timedelta(seconds=timeout):
+            st.session_state.authenticated = False
+            st.session_state.login_attempts = 0
+            return True
+    return False
 
 def authenticate(password_attempt):
-    """Simple password authentication"""
-    return password_attempt == "password"
+    """Enhanced password authentication with attempt limiting"""
+    max_attempts = st.secrets.get("ALLOWED_ATTEMPTS", 3)
+    correct_password = st.secrets["APP_PASSWORD"]
+    
+    if st.session_state.login_attempts >= max_attempts:
+        time.sleep(2)  # Add delay to prevent brute force
+        return False
+    
+    st.session_state.login_attempts += 1
+    if password_attempt == correct_password:
+        st.session_state.login_attempts = 0
+        st.session_state.last_activity = datetime.now()
+        return True
+    return False
 
 def reset_chat():
     """Reset the chat history"""
@@ -32,11 +59,20 @@ def get_gemini_response(model_name, prompt):
     except Exception as e:
         return f"Error: {str(e)}"
 
+def update_last_activity():
+    """Update the timestamp of last activity"""
+    st.session_state.last_activity = datetime.now()
+
 def main():
     st.set_page_config(page_title="Secure Gemini Chatbot", layout="wide")
     
     # Initialize session state
     initialize_session_state()
+    
+    # Check for session timeout
+    if check_session_timeout():
+        st.warning("Your session has expired. Please log in again.")
+        st.session_state.authenticated = False
     
     # Apply custom CSS
     st.markdown("""
@@ -57,6 +93,10 @@ def main():
         .bot-message {
             background-color: #f0f2f6;
         }
+        .stButton button {
+            width: 100%;
+            margin-top: 1rem;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -67,18 +107,32 @@ def main():
     if not st.session_state.authenticated:
         st.markdown("### Authentication Required")
         password_input = st.text_input("Enter password:", type="password")
+        
+        # Show remaining attempts
+        max_attempts = st.secrets.get("ALLOWED_ATTEMPTS", 3)
+        remaining_attempts = max_attempts - st.session_state.login_attempts
+        if remaining_attempts < max_attempts:
+            st.warning(f"Remaining attempts: {remaining_attempts}")
+        
         if st.button("Login"):
             if authenticate(password_input):
                 st.session_state.authenticated = True
                 st.experimental_rerun()
             else:
-                st.error("Incorrect password!")
+                if remaining_attempts <= 1:
+                    st.error("Maximum login attempts reached. Please try again later.")
+                else:
+                    st.error("Incorrect password!")
         return
 
     # Sidebar configuration
     with st.sidebar:
         st.header("Configuration")
-        api_key = st.text_input("Enter Gemini API Key:", type="password")
+        
+        # Try to get API key from secrets first
+        api_key = st.secrets.get("GEMINI_API_KEY", None)
+        if not api_key:
+            api_key = st.text_input("Enter Gemini API Key:", type="password")
         
         model_options = [
             'gemini-pro',
@@ -96,14 +150,20 @@ def main():
         if st.button("Reset Chat"):
             reset_chat()
             st.experimental_rerun()
+        
+        if st.button("Logout"):
+            st.session_state.authenticated = False
+            st.session_state.login_attempts = 0
+            st.experimental_rerun()
             
         st.markdown("---")
         st.markdown("### About")
         st.markdown("""
             This is a secure chatbot interface for Google's Gemini AI models.
-            - Enter your API key
-            - Select your preferred model
-            - Start chatting!
+            - Authenticated access only
+            - Session timeout protection
+            - Secure API key management
+            - Multiple model support
         """)
 
     # Configure Gemini if API key is provided
@@ -137,6 +197,8 @@ def main():
     user_input = st.text_area("Your message:", key="user_input", height=100)
     if st.button("Send"):
         if user_input:
+            update_last_activity()
+            
             # Add user message to chat history
             st.session_state.messages.append({
                 "role": "user",
